@@ -15,6 +15,7 @@ private final class FakeEngine: PlaybackEngine {
     var onEvent: ((PlaybackEngineEvent) -> Void)?
     var commands: [Command] = []
     var lastToken: UInt64 = 0
+    var lastEqualizer: EqualizerSettings?
 
     func load(url: URL, startingAt position: TimeInterval, token: UInt64) {
         lastToken = token
@@ -25,6 +26,7 @@ private final class FakeEngine: PlaybackEngine {
     func seek(to position: TimeInterval) { commands.append(.seek(position)) }
     func stop() { commands.append(.stop) }
     func invalidate() { commands.append(.invalidate) }
+    func setEqualizer(_ settings: EqualizerSettings) { lastEqualizer = settings }
 
     func finishTrack() {
         onEvent?(.finished(token: lastToken))
@@ -203,6 +205,26 @@ final class AudioPlayerTests: XCTestCase {
         XCTAssertEqual(player.currentTrack, tracks[0])
         XCTAssertFalse(player.isPlaying)
         XCTAssertTrue(engine.commands.isEmpty)
+    }
+
+    func testEqualizerIsSentToEngineAndRestored() {
+        player.updateEqualizer {
+            $0.isEnabled = true
+            $0.apply(EqualizerSettings.presets[2])
+        }
+        XCTAssertEqual(engine.lastEqualizer, player.equalizer)
+
+        let restoredEngine = FakeEngine()
+        let restored = AudioPlayer(
+            engine: restoredEngine,
+            session: AudioSessionManager(),
+            nowPlaying: NowPlayingManager(),
+            persistence: environment.persistence,
+            paths: environment.paths,
+            trackLookup: { _ in nil }
+        )
+        XCTAssertEqual(restored.equalizer, player.equalizer)
+        XCTAssertEqual(restoredEngine.lastEqualizer, player.equalizer)
     }
 
     func testSessionRestoreKeepsQueueWithoutStartingAudio() {

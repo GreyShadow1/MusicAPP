@@ -16,6 +16,7 @@ final class AudioPlayer: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var queue = PlaybackQueueManager()
     @Published private(set) var formatInfo: AudioFormatInfo?
+    @Published private(set) var equalizer = EqualizerSettings()
     @Published var errorMessage: String?
 
     let progress = PlaybackProgress()
@@ -24,6 +25,7 @@ final class AudioPlayer: ObservableObject {
     static let restartThreshold: TimeInterval = 3
     private static let maxConsecutiveFailures = 3
     private static let sessionKey = "playback.session"
+    private static let equalizerKey = "equalizer"
 
     private let engine: PlaybackEngine
     private let session: AudioSessionManager
@@ -69,6 +71,28 @@ final class AudioPlayer: ObservableObject {
             previous: { [weak self] in self?.previous() },
             seek: { [weak self] position in self?.seek(to: position) }
         ))
+        restoreEqualizer()
+    }
+
+    // MARK: - Equalizzatore
+
+    func updateEqualizer(_ change: (inout EqualizerSettings) -> Void) {
+        change(&equalizer)
+        engine.setEqualizer(equalizer)
+        if let data = try? JSONEncoder().encode(equalizer), let json = String(data: data, encoding: .utf8) {
+            try? persistence.setSetting(Self.equalizerKey, value: json)
+        }
+    }
+
+    private func restoreEqualizer() {
+        guard
+            let json = try? persistence.setting(Self.equalizerKey),
+            let data = json.data(using: .utf8),
+            let saved = try? JSONDecoder().decode(EqualizerSettings.self, from: data),
+            saved.gains.count == EqualizerSettings.frequencies.count
+        else { return }
+        equalizer = saved
+        engine.setEqualizer(saved)
     }
 
     // MARK: - Avvio di una coda

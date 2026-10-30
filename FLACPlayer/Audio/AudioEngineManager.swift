@@ -21,15 +21,16 @@ protocol PlaybackEngine: AnyObject {
     func stop()
     /// Da chiamare dopo un'interruzione: il grafo audio non è più affidabile.
     func invalidate()
+    func setEqualizer(_ settings: EqualizerSettings)
 }
 
 /// Percorso audio: FLACDecoder → AVAudioPCMBuffer (float32) → AVAudioPlayerNode →
-/// mixer → uscita.
+/// equalizzatore → mixer → uscita.
 ///
 /// Tutto lo stato è confinato in una coda seriale. La decodifica è guidata dai
 /// buffer completati: al massimo `maxBuffersInFlight` restano in memoria, quindi
-/// il consumo non dipende dalla lunghezza del brano. Nel percorso non ci sono
-/// equalizzazione, normalizzazione o guadagno: il mixer lavora a volume 1.
+/// il consumo non dipende dalla lunghezza del brano. L'equalizzatore è facoltativo:
+/// da spento è in bypass. Non ci sono normalizzazione o guadagno: il mixer lavora a volume 1.
 final class AudioEngineManager: PlaybackEngine {
     var onEvent: ((PlaybackEngineEvent) -> Void)?
 
@@ -41,6 +42,8 @@ final class AudioEngineManager: PlaybackEngine {
 
     private var engine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
+    private var equalizerNode: AVAudioUnitEQ?
+    private var equalizerSettings = EqualizerSettings()
     private var format: AVAudioFormat?
     private var configurationObserver: NSObjectProtocol?
 
@@ -129,6 +132,35 @@ final class AudioEngineManager: PlaybackEngine {
         }
     }
 
+    func setEqualizer(_ settings: EqualizerSettings) {
+        queue.async {
+            self.equalizerSettings = settings
+            if let node = self.equalizerNode {
+                self.apply(settings, to: node)
+            }
+        }
+    }
+
+    private func apply(_ settings: EqualizerSettings, to node: AVAudioUnitEQ) {
+        for (band, gain) in zip(node.bands, settings.gains) {
+            band.gain = gain
+        }
+        node.globalGain = settings.headroom
+        node.bypass = !settings.isEnabled
+    }
+
+    private func makeEqualizer() -> AVAudioUnitEQ {
+        let node = AVAudioUnitEQ(numberOfBands: EqualizerSettings.frequencies.count)
+        for (band, frequency) in zip(node.bands, EqualizerSettings.frequencies) {
+            band.filterType = .parametric
+            band.frequency = frequency
+            band.bandwidth = 1
+            band.bypass = false
+        }
+        apply(equalizerSettings, to: node)
+        return node
+    }
+
     // MARK: - Caricamento
 
     private func performLoad(url: URL, position: TimeInterval, token: UInt64) {
@@ -185,13 +217,17 @@ final class AudioEngineManager: PlaybackEngine {
 
         let newEngine = AVAudioEngine()
         let node = AVAudioPlayerNode()
+        let equalizer = makeEqualizer()
         newEngine.attach(node)
-        newEngine.connect(node, to: newEngine.mainMixerNode, format: format)
+        newEngine.attach(equalizer)
+        newEngine.connect(node, to: equalizer, format: format)
+        newEngine.connect(equalizer, to: newEngine.mainMixerNode, format: format)
         newEngine.prepare()
         try newEngine.start()
 
         engine = newEngine
         playerNode = node
+        equalizerNode = equalizer
         self.format = format
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -210,6 +246,7 @@ final class AudioEngineManager: PlaybackEngine {
         playerNode?.stop()
         engine?.stop()
         playerNode = nil
+        equalizerNode = nil
         engine = nil
         format = nil
     }

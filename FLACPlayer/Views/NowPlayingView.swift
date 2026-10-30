@@ -4,6 +4,7 @@ struct NowPlayingView: View {
     @EnvironmentObject var player: AudioPlayer
 
     @State private var isShowingQueue = false
+    @State private var isShowingEqualizer = false
 
     var body: some View {
         Group {
@@ -38,6 +39,9 @@ struct NowPlayingView: View {
         .background(Theme.background)
         .sheet(isPresented: $isShowingQueue) {
             QueueView()
+        }
+        .sheet(isPresented: $isShowingEqualizer) {
+            EqualizerView()
         }
     }
 
@@ -134,6 +138,17 @@ struct NowPlayingView: View {
             Spacer()
 
             FavoriteButton(trackID: track.id, font: .title3)
+
+            Spacer()
+
+            Button {
+                isShowingEqualizer = true
+            } label: {
+                Image(systemName: "slider.vertical.3")
+                    .foregroundColor(player.equalizer.isEnabled ? .accentColor : Theme.secondaryText)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Equalizzatore")
 
             Spacer()
 

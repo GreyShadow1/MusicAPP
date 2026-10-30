@@ -267,7 +267,7 @@ I test automatici non provano che il suono esca davvero. Dopo la prima installaz
 
 **Percorso audio.** `libFLAC → PCM float 32 bit → AVAudioPlayerNode → mixer → uscita`.
 
-- Nessun equalizzatore, normalizzazione o compressione.
+- Nessuna normalizzazione o compressione. L'equalizzatore è facoltativo e spento di default: si apre dal lettore, offre 10 bande e 8 preset e, quando è attivo, abbassa il volume quanto basta a evitare distorsioni.
 - I campioni fino a 24 bit restano esatti: il formato float a 32 bit li rappresenta senza arrotondamenti.
 - I file sono letti a blocchi di mezzo secondo. In memoria ci sono al massimo 3 secondi di audio.
 - I file originali non vengono mai modificati.
