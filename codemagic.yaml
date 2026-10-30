@@ -1,0 +1,112 @@
+# Compilazione cloud di FLAC Player. Nessuna firma e nessuna credenziale:
+# l'IPA prodotto non è firmato e viene firmato da Sideloadly su Windows.
+#
+# I workflow si avviano a mano dalla pagina di Codemagic, per non consumare
+# minuti gratuiti a ogni push.
+
+definitions:
+  environment: &build_environment
+    xcode: 26.6
+    vars:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+  artifacts: &build_artifacts
+    - build/ipa/*.ipa
+    - build/logs/*.log
+
+  scripts:
+    - &generate_project
+      name: Genera il progetto Xcode
+      script: |
+        set -euo pipefail
+        brew install xcodegen
+        xcodegen generate
+        mkdir -p build/logs
+
+    - &run_tests
+      name: Esegui i test
+      script: |
+        set -euo pipefail
+        DEVICE_ID=$(xcrun simctl list devices available -j \
+          | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))] | first | .udid')
+        test -n "$DEVICE_ID" && test "$DEVICE_ID" != "null"
+        xcodebuild test \
+          -project FLACPlayer.xcodeproj \
+          -scheme FLACPlayer \
+          -destination "id=$DEVICE_ID" \
+          -derivedDataPath build/DerivedDataTests \
+          CODE_SIGNING_ALLOWED=NO \
+          | tee build/logs/test.log \
+          | xcbeautify --report junit --report-path build/test-results
+      test_report: build/test-results/*.xml
+
+    - &build_ipa
+      name: Compila e crea l'IPA non firmato
+      script: |
+        set -euo pipefail
+        xcodebuild archive \
+          -project FLACPlayer.xcodeproj \
+          -scheme FLACPlayer \
+          -configuration Release \
+          -destination "generic/platform=iOS" \
+          -archivePath build/FLACPlayer.xcarchive \
+          -derivedDataPath build/DerivedData \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="" \
+          | tee build/logs/archive.log \
+          | xcbeautify
+
+        # Un .xcarchive non è un IPA: l'IPA è uno zip con la cartella Payload.
+        APP=build/FLACPlayer.xcarchive/Products/Applications/FLACPlayer.app
+        test -d "$APP"
+        mkdir -p build/ipa/Payload
+        ditto "$APP" build/ipa/Payload/FLACPlayer.app
+        (cd build/ipa && zip -qry FLACPlayer.ipa Payload && rm -rf Payload)
+
+    - &verify_ipa
+      name: Verifica il contenuto dell'IPA
+      script: |
+        set -euo pipefail
+        CHECK=$(mktemp -d)
+        unzip -q build/ipa/FLACPlayer.ipa -d "$CHECK"
+        APP="$CHECK/Payload/FLACPlayer.app"
+        PLIST="$APP/Info.plist"
+
+        lipo -archs "$APP/FLACPlayer" | grep -q arm64
+        test "$(/usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:0' "$PLIST")" = "audio"
+        test "$(/usr/libexec/PlistBuddy -c 'Print :UIFileSharingEnabled' "$PLIST")" = "true"
+        BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")
+        VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")
+        MINIMUM=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$PLIST")
+        test -n "$BUNDLE_ID"
+
+        echo "IPA valido: $BUNDLE_ID versione $VERSION, iOS minimo $MINIMUM"
+        ls -lh build/ipa/FLACPlayer.ipa
+
+workflows:
+  # Da usare di norma: esegue i test e, se passano, produce l'IPA.
+  ipa-con-test:
+    name: IPA per Sideloadly (con test)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment: *build_environment
+    scripts:
+      - *generate_project
+      - *run_tests
+      - *build_ipa
+      - *verify_ipa
+    artifacts: *build_artifacts
+
+  # Più veloce: nessun test. Utile per piccole modifiche all'interfaccia.
+  ipa-rapido:
+    name: IPA per Sideloadly (senza test)
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment: *build_environment
+    scripts:
+      - *generate_project
+      - *build_ipa
+      - *verify_ipa
+    artifacts: *build_artifacts

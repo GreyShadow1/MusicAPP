@@ -1,0 +1,5 @@
+# Fine riga Unix per tutto il testo: i file vengono compilati su macOS.
+* text=auto eol=lf
+
+*.flac binary
+*.png binary

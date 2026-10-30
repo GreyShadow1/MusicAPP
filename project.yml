@@ -1,0 +1,71 @@
+# Definizione del progetto Xcode. Codemagic la trasforma in FLACPlayer.xcodeproj
+# con XcodeGen: il .xcodeproj non è versionato e non va modificato a mano.
+name: FLACPlayer
+
+options:
+  bundleIdPrefix: com.dario
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  developmentLanguage: it
+
+packages:
+  CFLAC:
+    path: Packages/CFLAC
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+
+targets:
+  FLACPlayer:
+    type: application
+    platform: iOS
+    sources:
+      - path: FLACPlayer
+    dependencies:
+      - package: CFLAC
+    settings:
+      base:
+        # Unico punto da cambiare per il Bundle Identifier: vedi README, sezione O.
+        PRODUCT_BUNDLE_IDENTIFIER: com.dario.flacplayer.personal
+        INFOPLIST_FILE: FLACPlayer/Config/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: "NO"
+
+  FLACPlayerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FLACPlayerTests
+        excludes:
+          - "Fixtures/**"
+      - path: FLACPlayerTests/Fixtures
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: FLACPlayer
+      - package: CFLAC
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dario.flacplayer.personal.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+schemes:
+  FLACPlayer:
+    build:
+      targets:
+        FLACPlayer: all
+        FLACPlayerTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - FLACPlayerTests
+    archive:
+      config: Release

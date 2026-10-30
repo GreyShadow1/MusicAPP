@@ -1,0 +1,28 @@
+# Generato da XcodeGen sul Mac di compilazione
+*.xcodeproj/
+*.xcworkspace/
+
+# Risultati di compilazione
+build/
+DerivedData/
+.build/
+.swiftpm/
+Payload/
+*.ipa
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+
+# Mai nel repository: certificati, profili, credenziali
+*.p12
+*.cer
+*.mobileprovision
+*.mobileconfig
+*.pem
+*.key
+.env
+
+# Sistema e editor
+.DS_Store
+Thumbs.db
+.vscode/
