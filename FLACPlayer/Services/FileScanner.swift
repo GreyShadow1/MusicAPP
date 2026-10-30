@@ -39,7 +39,7 @@ struct FileScanner {
 
         // Se manca un brano, un suo duplicato ignorato può prenderne il posto:
         // in quel caso i file ignorati vanno ricontrollati.
-        let foundPaths = Set(files.map(.relativePath))
+        let foundPaths = Set(files.map(\.relativePath))
         let someFileIsGone = tracks.contains { !foundPaths.contains($0.relativePath) }
         let ignored: [String: IgnoredFile] = try someFileIsGone ? [:] : persistence.ignoredFiles()
 
